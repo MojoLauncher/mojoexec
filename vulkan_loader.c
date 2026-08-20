@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <jni.h>
 
-#include <driver_helper/nsbypass.h>
 #include <android/dlext.h>
 #include <mojoexec.h>
 #include <string.h>
@@ -19,8 +18,27 @@
 
 static char* driver_lib = NULL;
 static char* driver_path = NULL;
+static char* config_override = NULL;
 
 #ifdef ENABLE_VULKAN_OVERRIDE
+
+// This allows us to redirect Qualcomm proprietary config file
+void setup_fopen_hook(struct android_namespace_t *driver_ns, FILE* handle) {
+    if(!handle) {
+        printf("MojoExec: provide a correct path to override qgl config\n");
+        return;
+    }
+    void* fopen_hook = linker_ns_dlopen(driver_ns, "libfopenhook.so", RTLD_GLOBAL | RTLD_NOW);
+    if(!fopen_hook) goto fail;
+    void (*fhook_pass_handles)(FILE*) = dlsym(fopen_hook, "fhook_pass_handles");
+    if(!fhook_pass_handles) goto fail;
+    fhook_pass_handles(handle);
+    return;
+
+    fail:
+    printf("MojoExec: failed to init fopen hook!\n");
+}
+
 
 static bool load_vulkan_driver() {
     static bool driver_loaded = false;
@@ -46,14 +64,13 @@ static bool load_vulkan_driver() {
     struct android_namespace_t *driver_ns = main_ns;
     if(driver_path != NULL) {
         driver_ns = linker_ns_load(driver_path, "mojoexec-driver");
+        if(config_override) setup_fopen_hook(driver_ns, fopen(config_override, "r"));
     }
-
     void* linkerhook = linker_ns_dlopen(main_ns, "liblinkerhook.so", RTLD_LOCAL | RTLD_NOW);
     if(linkerhook == NULL) {
         printf("MojoExec: failed to load linkerhook! %s\n", dlerror());
         return NULL;
     }
-
     void* driver_handle = linker_ns_dlopen(driver_ns, driver_lib, RTLD_LOCAL | RTLD_NOW);
     if(driver_handle == NULL) {
         printf("MojoExec: Failed to load custom Vulkan driver (%s)!\n%s\n", driver_lib, dlerror());
@@ -119,4 +136,11 @@ Java_git_artdeell_mojoexec_MojoExec_configureCustomVulkanDriver(JNIEnv *env, jcl
                                                                 jstring library_search_path) {
     save_jvm_string(env, &driver_lib, library_name);
     save_jvm_string(env, &driver_path, library_search_path);
+}
+
+// This function is directly tied to Adreno Vulkan driver hence it's located here
+JNIEXPORT void JNICALL
+Java_git_artdeell_mojoexec_MojoExec_setQglConfigPath(JNIEnv *env, jclass clazz,
+                                                          jstring config_path) {
+    save_jvm_string(env, &config_override, config_path);
 }

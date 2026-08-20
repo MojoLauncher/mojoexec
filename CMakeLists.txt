@@ -32,3 +32,10 @@ target_link_options(mojoexec PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURC
 set_target_properties(mojoexec PROPERTIES
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/version.script"
 )
+
+add_library(fopenhook SHARED
+        driver_helper/fopen_hook.c)
+target_include_directories(fopenhook PUBLIC include)
+target_include_directories(fopenhook PRIVATE ".")
+target_link_options(fopenhook PRIVATE "-Wl,-z,global")
+target_link_libraries(fopenhook PRIVATE mojoexec)
