@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <inttypes.h>
 
 #define TAG __FILE_NAME__
 #include <log.h>
@@ -29,7 +30,6 @@ struct ctx {
     void *dynstr;
     void *dynsym;
     ELF_XWORD nsyms;
-    off_t bias;
 };
 
 int fake_dlclose(void *handle)
@@ -43,44 +43,58 @@ int fake_dlclose(void *handle)
     return 0;
 }
 
+bool try_find_map_entry(const char* name, char outpath[1024], uintptr_t *load_addr) {
+    FILE *maps = fopen("/proc/self/maps", "r");
+    if(!maps) return false;
+
+    char buff[1024] = {0};
+    uintptr_t start, end, offset;
+    int major, minor, path_offset;
+    unsigned long inode;
+    char perms[4];
+    bool found = false;
+
+    while(fgets(buff, sizeof(buff), maps)) {
+        if(!strstr(buff, name)) continue;
+        if(strstr(buff, "[anon:")) continue;
+
+        int parsed = sscanf(buff, "%"SCNxPTR"-%"SCNxPTR" %4c %"SCNxPTR" %x:%x %lu %n",
+                            &start, &end, perms, &offset, &major, &minor, &inode, &path_offset);
+
+        if(parsed < 7) continue;
+
+        if(perms[0] != 'r') continue;
+
+        size_t len = strlen(buff);
+        buff[--len] = 0;
+
+        *load_addr = start;
+        memcpy(outpath, &buff[path_offset], len);
+        found = true;
+
+        break;
+    }
+
+    fclose(maps);
+    return found;
+}
 
 /* flags are ignored */
 
-void *fake_dlopen(const char *libpath, int flags)
+void *fake_dlopen(const char *search, int flags)
 {
-    FILE *maps;
-    char buff[1024];
     struct ctx *ctx = 0;
-    off_t load_addr, size;
+    uintptr_t load_addr, size;
     int k, fd = -1, found = 0;
     void *shoff;
     ELF_EHDR *elf = MAP_FAILED;
 
 #define fatal(fmt,args...) do { LOGE(fmt,##args); goto err_exit; } while(0)
-    maps = fopen("/proc/self/maps", "r");
-    if(!maps) fatal("failed to open maps");
+    char libpath[1024];
 
-    while(!found && fgets(buff, sizeof(buff), maps))
-        if(strstr(buff,libpath)) found = 1;
+    if(!try_find_map_entry(search, libpath, &load_addr))
+        fatal("Failed to find the library in maps");
 
-    fclose(maps);
-
-    if(!found) fatal("%s not found in my userspace", libpath);
-
-    if(sscanf(buff, "%lx", &load_addr) != 1)
-        fatal("failed to read load address for %s", libpath);
-
-    if(libpath[0] != '/') { //not a full path
-        char* name_start = strstr(buff,libpath); // find the name start again
-        while(name_start > buff) { // while we are in the bounds of our buffer
-            if(*name_start == ' ' && *(name_start+1) == '/') { // search for a space preceeding the salsh
-                libpath = name_start+1; //this is where the full name is
-            }
-            name_start--;
-        }
-        char* name_end = strchr(libpath, '\n');
-        if(name_end != NULL) *name_end = 0;
-    }
     LOGI("%s loaded in Android at 0x%08lx", libpath, load_addr);
     /* Now, mmap the same library once again */
 
@@ -108,7 +122,6 @@ void *fake_dlopen(const char *libpath, int flags)
         log_dbg("%s: k=%d shdr=%p type=%x", __func__, k, sh, sh->sh_type);
 
         switch(sh->sh_type) {
-
             case SHT_DYNSYM:
                 if(ctx->dynsym) fatal("%s: duplicate DYNSYM sections", libpath); /* .dynsym */
                 ctx->dynsym = malloc(sh->sh_size);
@@ -123,14 +136,8 @@ void *fake_dlopen(const char *libpath, int flags)
                 if(!ctx->dynstr) fatal("%s: no memory for .dynstr", libpath);
                 memcpy(ctx->dynstr, ((void *) elf) + sh->sh_offset, sh->sh_size);
                 break;
-
-            case SHT_PROGBITS:
-                if(!ctx->dynstr || !ctx->dynsym) break;
-                /* won't even bother checking against the section name */
-                ctx->bias = (off_t) sh->sh_addr - (off_t) sh->sh_offset;
-                k = elf->e_shnum;  /* exit for */
-                break;
         }
+        if(ctx->dynstr && ctx->dynsym) break;
     }
 
     munmap(elf, size);
@@ -160,10 +167,10 @@ void *fake_dlsym(void *handle, const char *name)
 
     for(k = 0; k < ctx->nsyms; k++, sym++)
         if(strcmp(strings + sym->st_name, name) == 0) {
-            /*  NB: sym->st_value is an offset into the section for relocatables,
-            but a VMA for shared libs or exe files, so we have to subtract the bias */
-            void *ret = ctx->load_addr + sym->st_value - ctx->bias;
-            LOGI("%s found at %p", name, ret);
+            /* R NB: Actually! Don't subtract the bias. We don't want the offset of the symbol in
+             * the library, we want its offset in the VA space of the process! */
+            void *ret = ctx->load_addr + sym->st_value;
+            LOGI("%s found at %p %x", name, ret, sym->st_value);
             return ret;
         }
     return 0;
