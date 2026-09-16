@@ -6,4 +6,5 @@ public class MojoExec {
     public static native void setUseTurnip(boolean enable);
     public static native void preloadVulkan();
     public static native void setNativeLibraryDir(String dir);
+    public static native void setUseBigCoreAffinity(boolean enable);
 }
