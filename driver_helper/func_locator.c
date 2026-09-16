@@ -31,17 +31,19 @@ static void* fakel_locate_libdl_android() {
         LOGE("fakel failed to find linker in VA space");
         return NULL;
     }
+
     loader_dlopen_t loader_dlopen = fake_dlsym(linker_handle, "__loader_dlopen");
     if(!loader_dlopen) {
         LOGE("fakel failed to find loader_dlopen entrypoint");
         goto fail;
     }
+    fake_dlclose(linker_handle);
+
     void* dl_android = loader_dlopen("libdl_android.so", RTLD_NOW, &dlopen);
     if(!dl_android) {
         LOGE("fakel failed to load libdl_android: %s", dlerror());
         goto fail;
     }
-    fake_dlclose(linker_handle);
     return dl_android;
     fail:
     fake_dlclose(linker_handle);
@@ -77,9 +79,12 @@ bool locate_namespace_funcs(android_ldfuncs_t* funcs) {
 
     handle = fake_dlopen("libdl_android.so", 0);
     if(handle) {
-        funcs->dl_handle = handle;
-        funcs->close = fake_dlclose;
+        funcs->dl_handle = NULL;
+        funcs->close = NULL;
         load_symbols(fake_dlsym, handle, funcs);
+        // fake_dlopen doesn't reference the library, the handle just stores copies of ELF sections.
+        // Might as well free them as soon as we're done with loading symbols
+        fake_dlclose(handle);
         return true;
     }
     return false;

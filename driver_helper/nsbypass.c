@@ -62,7 +62,7 @@ bool linker_ns_load(const char* lib_search_path) {
     // to itself and causes a deadlock when loading the vulkan driver.
     ldfuncs.link_namespaces(driver_namespace, NULL, "libnativeloader.so");
     ldfuncs.link_namespaces(driver_namespace, NULL, "libnativeloader_lazy.so");
-    ldfuncs.close(ldfuncs.dl_handle);
+    if(ldfuncs.dl_handle && ldfuncs.close) ldfuncs.close(ldfuncs.dl_handle);
     return true;
 }
 
