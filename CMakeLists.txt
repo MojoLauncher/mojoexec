@@ -5,6 +5,7 @@ project(mojoexec DESCRIPTION "Android porting utility library")
 add_library(mojoexec SHARED
         vulkan_loader.c
         mojoexec.c
+        utils.c
         driver_helper/nsbypass.c
         driver_helper/fake_dlfcn.c
         driver_helper/func_locator.c)
@@ -17,7 +18,7 @@ target_link_libraries(mojoexec PRIVATE log)
 if(CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     target_sources(mojoexec PRIVATE driver_helper/arm64_func_locator.c)
     target_compile_definitions(mojoexec PRIVATE USE_ARM64_LOCATOR)
-    target_compile_definitions(mojoexec PRIVATE ENABLE_TURNIP_LOADER)
+    target_compile_definitions(mojoexec PRIVATE ENABLE_VULKAN_OVERRIDE)
 
     add_library(linkerhook SHARED
             driver_helper/hook.c

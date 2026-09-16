@@ -25,9 +25,11 @@
 
 /* Library search path */
 #ifdef PLATFORM_64
-#define SEARCH_PATH "/system/lib64"
+#define SYSTEM_PATH "/system/lib64"
+#define SEARCH_PATH "/system/lib64:/vendor/lib64:/system_ext/lib64"
 #else
-#define SEARCH_PATH "/system/lib"
+#define SYSTEM_PATH "/system/lib"
+#define SEARCH_PATH "/system/lib:/vendor/lib:/system_ext/lib"
 #endif
 
 static struct android_namespace_t* driver_namespace = NULL;
@@ -41,7 +43,7 @@ bool linker_ns_load(const char* lib_search_path) {
 
     // assemble the full path search path
     char full_path[strlen(SEARCH_PATH) + strlen(lib_search_path) + 2 + 1];
-    sprintf(full_path, "%s:%s", SEARCH_PATH, lib_search_path);
+    sprintf(full_path, "%s:%s", lib_search_path, SEARCH_PATH);
     driver_namespace = ldfuncs.create_namespace("pojav-driver",
                                                       full_path,
                                                       full_path,
@@ -117,7 +119,7 @@ void* linker_ns_dlopen_unique(const char* tmpdir, const char* name, const char* 
     int patch_fd, real_fd;
     size_t fsize, totalsize;
 
-    snprintf(pathbuf, PATH_MAX, "%s/%s", SEARCH_PATH, name);
+    snprintf(pathbuf, PATH_MAX, "%s/%s", SYSTEM_PATH, name);
     real_fd = open(pathbuf, O_RDONLY);
     if(real_fd == -1) return NULL;
 
