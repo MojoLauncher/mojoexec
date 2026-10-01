@@ -34,6 +34,9 @@ static struct android_namespace_t* driver_namespace = NULL;
 
 bool linker_ns_load(const char* lib_search_path) {
     if(driver_namespace != NULL) return true; // Do not initialize namespaces multiple times, this caused very funny bugs we spent hours debugging
+    if(lib_search_path == NULL) {
+        lib_search_path = "";
+    }
     android_ldfuncs_t ldfuncs;
     if(!locate_namespace_funcs(&ldfuncs)) {
         return false;
@@ -45,8 +48,13 @@ bool linker_ns_load(const char* lib_search_path) {
     driver_namespace = ldfuncs.create_namespace("pojav-driver",
                                                 full_path,
                                                 full_path,
-                                                3 /* TYPE_SHAFED | TYPE_ISOLATED */,
+                                                (uint64_t)3 /* TYPE_SHARED | TYPE_ISOLATED */,
                                                 "/system/:/system_ext/:/data/:/vendor/:/apex/", NULL);
+    if(driver_namespace == NULL) {
+        LOGE("linker_ns_load: failed to create driver_namespace");
+        if(ldfuncs.dl_handle && ldfuncs.close) ldfuncs.close(ldfuncs.dl_handle);
+        return false;
+    }
     // THIS IS VERY IMPORTANT and how I trolled FoldCraft:
     // You need to link the new driver_namespace with NULL and and add ld-android.so
     // in the link list, to pass through the driver_namespace correctly.
