@@ -4,6 +4,7 @@ project(mojoexec DESCRIPTION "Android porting utility library")
 
 add_library(mojoexec SHARED
         vulkan_loader.c
+        vulkan.c
         mojoexec.c
         driver_helper/nsbypass.c
         driver_helper/fake_dlfcn.c

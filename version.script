@@ -1,6 +1,7 @@
 {
     global:
         mojoexec_*;
+        vk*;
         Java_*;
     local:
         *;
