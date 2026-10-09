@@ -5,10 +5,14 @@ project(mojoexec DESCRIPTION "Android porting utility library")
 add_library(mojoexec SHARED
         vulkan_loader.c
         vulkan/vk_wrapper.c
+        vulkan/instance.c
+        vulkan/swapchain.c
         mojoexec.c
         driver_helper/nsbypass.c
         driver_helper/fake_dlfcn.c
-        driver_helper/func_locator.c)
+        driver_helper/func_locator.c
+        unordered_map/int_hash.c
+        unordered_map/unordered_map.c)
 
 target_include_directories(mojoexec PRIVATE ".")
 target_include_directories(mojoexec PUBLIC include)

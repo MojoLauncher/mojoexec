@@ -5,6 +5,7 @@
 #ifndef POJAVLAUNCHER_UTIL_H
 #define POJAVLAUNCHER_UTIL_H
 
+#define VK_USE_PLATFORM_ANDROID_KHR 1
 #include <vulkan/vulkan.h>
 #include <stdio.h>
 #include <string.h>
