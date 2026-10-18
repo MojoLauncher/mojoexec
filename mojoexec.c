@@ -10,6 +10,14 @@
 #include <dlfcn.h>
 
 #include "utils.h"
+#include "paths.h"
+
+/* Library search path */
+#ifdef PLATFORM_64
+#define SEARCH_PATH "/system/lib64"
+#else
+#define SEARCH_PATH "/system/lib"
+#endif
 
 mojoexec_renderspec_t mojoexec_renderspec;
 
@@ -17,20 +25,23 @@ const char* mojoexec_native_dir = NULL;
 char* native_egl_path = NULL;
 bool egl_use_bypass = false;
 
+static android_namespace_t *mojoexec_namespace = NULL;
+
+
 JNIEXPORT jboolean JNICALL
 Java_git_artdeell_mojoexec_MojoExec_prepareEgl(JNIEnv *env, jclass clazz, jstring egl_path,
                                                jboolean use_bypass, jboolean use_gles,
                                                jint gles_version) {
     save_jvm_string(env, &native_egl_path, egl_path);
     if(native_egl_path == NULL) return false;
-    if(use_bypass && !linker_ns_load(false, mojoexec_native_dir)) return false;
+    if(use_bypass && !mojoexec_get_namespace()) return false;
     egl_use_bypass = use_bypass;
     void* preload_handle = mojoexec_acq_egl_handle();
     if(!preload_handle) {
         printf("MojoExec: Failed to load EGL: %s\n", dlerror());
         return false;
     }
-    printf("MojoExec: Loaded EGL %s (in namespace: %i)\n", native_egl_path, egl_use_bypass);
+    printf("MojoExec: Loaded EGL %s (mojoexec namespace: %b)\n", native_egl_path, egl_use_bypass);
     mojoexec_renderspec.force_gles_context = use_gles;
     mojoexec_renderspec.override_major_version = gles_version;
     return true;
@@ -53,7 +64,15 @@ Java_git_artdeell_mojoexec_MojoExec_setDisplayParams(JNIEnv *env, jclass clazz, 
 
 void* mojoexec_acq_egl_handle() {
     int flags = RTLD_LOCAL | RTLD_NOW;
-    if(egl_use_bypass) return linker_ns_dlopen(false, native_egl_path, flags);
+    if(egl_use_bypass) return linker_ns_dlopen(mojoexec_namespace, native_egl_path, flags);
     else return dlopen(native_egl_path, flags);
+}
+
+android_namespace_t *mojoexec_get_namespace() {
+    if(mojoexec_namespace) return mojoexec_namespace;
+    char full_path[strlen(SEARCH_PATH) + strlen(mojoexec_native_dir) + 2 + 1];
+    sprintf(full_path, "%s:%s", mojoexec_native_dir, SEARCH_PATH);
+    mojoexec_namespace = linker_ns_load(full_path, "mojoexec-driver");
+    return mojoexec_namespace;
 }
 

@@ -16,10 +16,13 @@ typedef struct {
     float disp_hz;
 } mojoexec_renderspec_t;
 
+typedef struct android_namespace_t android_namespace_t;
 extern mojoexec_renderspec_t mojoexec_renderspec;
+
 extern const char* mojoexec_native_dir;
 void* mojoexec_acq_vulkan_handle();
 void* mojoexec_acq_egl_handle();
 void mojoexec_make_bigcore_affine();
+android_namespace_t *mojoexec_get_namespace();
 
 #endif //POJAVLAUNCHER_MOJOEXEC_H

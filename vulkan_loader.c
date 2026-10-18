@@ -11,6 +11,8 @@
 #include <driver_helper/nsbypass.h>
 #include <android/dlext.h>
 #include <mojoexec.h>
+#include <string.h>
+#include "paths.h"
 
 #include "utils.h"
 
@@ -23,7 +25,21 @@ static bool custom_driver_enabled = false;
 static char* driver_override = NULL;
 static char* driver_path = NULL;
 
+#define ENABLE_VULKAN_OVERRIDE
+
 #ifdef ENABLE_VULKAN_OVERRIDE
+
+android_namespace_t *blob_namespace = NULL;
+
+static android_namespace_t *get_blob_namespace() {
+    if(blob_namespace) return blob_namespace;
+    if(!driver_path) return NULL;
+    char full_path[strlen(BLOB_SEARCH_PATH) + strlen(driver_path) + 2 + 1];
+    sprintf(full_path, "%s:%s", driver_path, BLOB_SEARCH_PATH);
+    blob_namespace = linker_ns_load(full_path, "blob-driver");
+    return blob_namespace;
+}
+
 bool load_vulkan_driver() {
     static bool driver_loaded = false;
     if(driver_loaded) return true;
@@ -34,27 +50,30 @@ bool load_vulkan_driver() {
     // But if the driver is overridden then it might a blob hence we'll use the blob namespace with extra search paths
     // Before we do this, decide what driver we'll use
     bool blob = driver_override && driver_path;
-    if(!linker_ns_load(false, mojoexec_native_dir)) {
-        printf("MojoExec: failed to create main namespace!\n");
+    android_namespace_t *main_ns = mojoexec_get_namespace();
+    if(!main_ns) {
+        printf("MojoExec: failed to load main namespace!\n");
         return NULL;
     }
-    if(blob && !linker_ns_load(blob, driver_path)) {
-        printf("MojoExec: failed to create blob namespace!\n");
+    if(blob && !get_blob_namespace()) {
+        printf("MojoExec: failed to load blob namespace!\n");
         blob = false;
     }
-    void* linkerhook = linker_ns_dlopen(false, "liblinkerhook.so", RTLD_LOCAL | RTLD_NOW);
+    // Custom drivers are loaded in the blob namespace
+    android_namespace_t *current_ns = blob ? blob_namespace : main_ns;
+    void* linkerhook = linker_ns_dlopen(main_ns, "liblinkerhook.so", RTLD_LOCAL | RTLD_NOW);
     if(linkerhook == NULL) {
         printf("MojoExec: failed to load linkerhook! %s\n", dlerror());
         return NULL;
     }
     char* driver_library = blob ? driver_override : DEFAULT_VULKAN_DRIVER;
-    void* driver_handle = linker_ns_dlopen(blob, driver_library, RTLD_LOCAL | RTLD_NOW);
+    void* driver_handle = linker_ns_dlopen(current_ns, driver_library, RTLD_LOCAL | RTLD_NOW);
     if(driver_handle == NULL) {
         printf("MojoExec: Failed to load custom Vulkan driver (%s)!\n%s\n",driver_library, dlerror());
         goto fail_l;
     } else printf("MojoExec: Loaded Vulkan library : %p\n", driver_handle);
 
-    void* dl_android = linker_ns_dlopen(false, "libdl_android.so", RTLD_LOCAL | RTLD_LAZY);
+    void* dl_android = linker_ns_dlopen(main_ns, "libdl_android.so", RTLD_LOCAL | RTLD_LAZY);
     if(dl_android == NULL) {
         printf("MojoExec: failed to dlopen dl_android! %s\n", dlerror());
         goto fail_t;
@@ -66,7 +85,7 @@ bool load_vulkan_driver() {
     if(linkerhook_pass_handles == NULL || android_get_exported_namespace == NULL) goto fail_d;
     linkerhook_pass_handles(driver_handle, android_dlopen_ext, android_get_exported_namespace);
 
-    void* libvulkan = linker_ns_dlopen_unique(false, cache_dir, "libvulkan.so", "libmjlvlk.so", RTLD_LOCAL | RTLD_NOW);
+    void* libvulkan = linker_ns_dlopen_unique(main_ns, cache_dir, "libvulkan.so", "libmjlvlk.so", RTLD_LOCAL | RTLD_NOW);
     if(libvulkan) {
         printf("MojoExec: Loaded mjlvlk, ptr=%p\n", libvulkan);
         driver_loaded = true;

@@ -19,39 +19,22 @@
 #include <elf.h>
 #include <elf_defs.h>
 #include <inttypes.h>
+#include "paths.h"
 
 #define TAG __FILE_NAME__
 #include <log.h>
 
-/* Library search path */
-#ifdef PLATFORM_64
-#define SEARCH_PATH "/system/lib64"
-#define BLOB_SEARCH_PATH "/system/lib64:/vendor/lib64:/system_ext/lib64"
-#else
-#define SEARCH_PATH "/system/lib"
-#define BLOB_SEARCH_PATH "/system/lib:/vendor/lib:/system_ext/lib"
-#endif
-
-
-static struct android_namespace_t* driver_namespace = NULL;
-static struct android_namespace_t* blob_driver_namespace = NULL;
-
-bool linker_ns_load(bool blob, const char* lib_search_path) {
-    struct android_namespace_t** current_namespace = blob ? &blob_driver_namespace : &driver_namespace;
-    const char* ns_name = blob ? "blob-driver" : "mojoexec-driver";
-    const char* search_path = blob ? BLOB_SEARCH_PATH : SEARCH_PATH;
-    if(*current_namespace != NULL) return true; // Do not initialize namespaces multiple times, this caused very funny bugs we spent hours debugging
+struct android_namespace_t *linker_ns_load(const char* lib_search_path, const char* name) {
     android_ldfuncs_t ldfuncs;
     if(!locate_namespace_funcs(&ldfuncs)) {
         return false;
     }
 
-    // assemble the full path search path
-    char full_path[strlen(search_path) + strlen(lib_search_path) + 2 + 1];
-    sprintf(full_path, "%s:%s", lib_search_path, search_path);
-    *current_namespace = ldfuncs.create_namespace(ns_name,
-                                                      full_path,
-                                                      full_path,
+    printf("MojoExec: creating new namespace %s : %s\n", name, lib_search_path);
+
+    struct android_namespace_t *ns = ldfuncs.create_namespace(name,
+                                                lib_search_path,
+                                            lib_search_path,
                                                       3 /* TYPE_SHAFED | TYPE_ISOLATED */,
                                                       "/system/:/system_ext/:/data/:/vendor/:/apex/", NULL);
     // THIS IS VERY IMPORTANT and how I trolled FoldCraft:
@@ -62,21 +45,21 @@ bool linker_ns_load(bool blob, const char* lib_search_path) {
     // a lot of android versions
     // FoldCraft got trolled because they copied the
     // old broken code verbatim and didn't even test it thoroughly
-    ldfuncs.link_namespaces(*current_namespace, NULL, "ld-android.so");
+    ldfuncs.link_namespaces(ns, NULL, "ld-android.so");
     // Also establish links to use the libnativeloader(_lazy).so libraries
     // from the global namespace. This is a workaround for an EMUI issue where
     // the newly loaded libnativeloader_lazy for some unknown reason links
     // to itself and causes a deadlock when loading the vulkan driver.
-    ldfuncs.link_namespaces(*current_namespace, NULL, "libnativeloader.so");
-    ldfuncs.link_namespaces(*current_namespace, NULL, "libnativeloader_lazy.so");
+    ldfuncs.link_namespaces(ns, NULL, "libnativeloader.so");
+    ldfuncs.link_namespaces(ns, NULL, "libnativeloader_lazy.so");
     if(ldfuncs.dl_handle && ldfuncs.close) ldfuncs.close(ldfuncs.dl_handle);
-    return true;
+    return ns;
 }
 
-void* linker_ns_dlopen(bool blob, const char* name, int flag) {
+void* linker_ns_dlopen(struct android_namespace_t * namespace, const char* name, int flag) {
     android_dlextinfo dlextinfo;
     dlextinfo.flags = ANDROID_DLEXT_USE_NAMESPACE;
-    dlextinfo.library_namespace = blob ? blob_driver_namespace : driver_namespace;
+    dlextinfo.library_namespace = namespace;
     return android_dlopen_ext(name, flag, &dlextinfo);
 }
 
@@ -117,7 +100,7 @@ bool patch_elf_soname(int patchfd, int realfd, size_t size, const char* patchnam
 
 #define PAGE_ALIGN(addr)        (((addr)+pagesize-1)&(~(pagesize-1)))
 
-void* linker_ns_dlopen_unique(bool blob, const char* tmpdir, const char* name, const char* patch_name, int flags) {
+void* linker_ns_dlopen_unique(struct android_namespace_t * namespace, const char* tmpdir, const char* name, const char* patch_name, int flags) {
     int pagesize = getpagesize();
     char pathbuf[PATH_MAX];
     static uint16_t patchid;
@@ -164,7 +147,7 @@ void* linker_ns_dlopen_unique(bool blob, const char* tmpdir, const char* name, c
     android_dlextinfo extinfo;
     extinfo.flags = ANDROID_DLEXT_USE_NAMESPACE | ANDROID_DLEXT_USE_LIBRARY_FD;
     extinfo.library_fd = patch_fd;
-    extinfo.library_namespace = blob ? blob_driver_namespace : driver_namespace;
+    extinfo.library_namespace = namespace;
     return android_dlopen_ext(patch_name, flags, &extinfo);
 
     fail_both:
