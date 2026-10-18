@@ -23,7 +23,7 @@ Java_git_artdeell_mojoexec_MojoExec_prepareEgl(JNIEnv *env, jclass clazz, jstrin
                                                jint gles_version) {
     save_jvm_string(env, &native_egl_path, egl_path);
     if(native_egl_path == NULL) return false;
-    if(use_bypass && !linker_ns_load(mojoexec_native_dir)) return false;
+    if(use_bypass && !linker_ns_load(false, mojoexec_native_dir)) return false;
     egl_use_bypass = use_bypass;
     void* preload_handle = mojoexec_acq_egl_handle();
     if(!preload_handle) {
@@ -53,7 +53,7 @@ Java_git_artdeell_mojoexec_MojoExec_setDisplayParams(JNIEnv *env, jclass clazz, 
 
 void* mojoexec_acq_egl_handle() {
     int flags = RTLD_LOCAL | RTLD_NOW;
-    if(egl_use_bypass) return linker_ns_dlopen(native_egl_path, flags);
+    if(egl_use_bypass) return linker_ns_dlopen(false, native_egl_path, flags);
     else return dlopen(native_egl_path, flags);
 }
 

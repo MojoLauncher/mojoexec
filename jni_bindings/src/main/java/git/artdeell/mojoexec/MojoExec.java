@@ -5,6 +5,7 @@ public class MojoExec {
     public static native void setDisplayParams(int width, int height, float hz);
     public static native void overrideVulkanDriver(boolean enable);
     public static native void overrideVulkanDriverPath(String vulkanLibrary);
+    public static native void overrideVulkanLibraryPath(String vulkanLibraryPath);
     public static native void preloadVulkan();
     public static native void setNativeLibraryDir(String dir);
     public static native void setUseBigCoreAffinity(boolean enable);
