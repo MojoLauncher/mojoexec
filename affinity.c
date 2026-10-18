@@ -2,6 +2,8 @@
 // Created by maks on 19.06.2023.
 //
 
+#define _GNU_SOURCE // Well...
+
 #include <linux/limits.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -11,6 +13,8 @@
 #include <sched.h>
 #include <string.h>
 #include <jni.h>
+#include <spawn.h>
+
 
 #include "mojoexec.h"
 
