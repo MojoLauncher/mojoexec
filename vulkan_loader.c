@@ -43,7 +43,7 @@ bool load_vulkan_driver() {
     if(driver_handle == NULL) {
         printf("MojoExec: Failed to load custom Vulkan driver (%s)!\n%s\n",driver_library, dlerror());
         goto fail_l;
-    }
+    } else printf("MojoExec: Loaded Vulkan library : %p\n", driver_handle);
 
     void* dl_android = linker_ns_dlopen(false, "libdl_android.so", RTLD_LOCAL | RTLD_LAZY);
     if(dl_android == NULL) goto fail_t;
@@ -55,8 +55,8 @@ bool load_vulkan_driver() {
     linkerhook_pass_handles(driver_handle, android_dlopen_ext, android_get_exported_namespace);
 
     void* libvulkan = linker_ns_dlopen_unique(false, cache_dir, "libvulkan.so", "libmjlvlk.so", RTLD_LOCAL | RTLD_NOW);
-    printf("MojoExec: Loaded mjlvlk, ptr=%p\n", libvulkan);
     if(libvulkan) {
+        printf("MojoExec: Loaded mjlvlk, ptr=%p\n", libvulkan);
         driver_loaded = true;
         return true;
     }
