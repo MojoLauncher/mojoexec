@@ -126,14 +126,15 @@ void* linker_ns_dlopen_unique(bool blob, const char* tmpdir, const char* name, c
 
     snprintf(pathbuf, PATH_MAX, "%s/%s", SEARCH_PATH, name);
     real_fd = open(pathbuf, O_RDONLY);
-    if(real_fd == -1) return NULL;
-
-    {
-        struct stat64 real_stat;
-        if (fstat64(real_fd, &real_stat)) goto fail_real;
-        fsize = real_stat.st_size;
-        totalsize = PAGE_ALIGN(fsize);
+    if(real_fd == -1) {
+        printf("MojoExec: failed to open real_fd\n");
+        return NULL;
     }
+
+    struct stat64 real_stat;
+    if (fstat64(real_fd, &real_stat)) goto fail_real;
+    fsize = real_stat.st_size;
+    totalsize = PAGE_ALIGN(fsize);
 
     patch_fd = (int) syscall(__NR_memfd_create, patch_name, MFD_CLOEXEC);
     if(patch_fd == -1) {
@@ -142,13 +143,20 @@ void* linker_ns_dlopen_unique(bool blob, const char* tmpdir, const char* name, c
         snprintf(pathbuf, PATH_MAX, "%s/%"PRIu16"", tmpdir, patchid++);
         patch_fd = open(pathbuf, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     }
-    if(patch_fd == -1) goto fail_real;
+    if(patch_fd == -1) {
+        printf("MojoExec: failed to open - invalid fd (fail_real)\n");
+        goto fail_real;
+    }
 
-    if(ftruncate64(patch_fd, totalsize) == -1) goto fail_both;
+    if(ftruncate64(patch_fd, totalsize) == -1) {
+        printf("MojoExec: failed to ftruncate (fail_both)\n");
+        goto fail_both;
+    }
 
     bool patch_result = patch_elf_soname(patch_fd, real_fd, fsize, patch_name);
     close(real_fd);
     if(!patch_result) {
+        printf("MojoExec: patch_result failed\n");
         close(patch_fd);
         return NULL;
     }

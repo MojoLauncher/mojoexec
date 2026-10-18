@@ -34,10 +34,19 @@ bool load_vulkan_driver() {
     // But if the driver is overridden then it might a blob hence we'll use the blob namespace with extra search paths
     // Before we do this, decide what driver we'll use
     bool blob = driver_override && driver_path;
-    if(!linker_ns_load(false, mojoexec_native_dir)) return NULL;
-    if(blob && !linker_ns_load(blob, driver_path)) blob = false;
+    if(!linker_ns_load(false, mojoexec_native_dir)) {
+        printf("MojoExec: failed to create main namespace!\n");
+        return NULL;
+    }
+    if(blob && !linker_ns_load(blob, driver_path)) {
+        printf("MojoExec: failed to create blob namespace!\n");
+        blob = false;
+    }
     void* linkerhook = linker_ns_dlopen(false, "liblinkerhook.so", RTLD_LOCAL | RTLD_NOW);
-    if(linkerhook == NULL) return NULL;
+    if(linkerhook == NULL) {
+        printf("MojoExec: failed to load linkerhook! %s\n", dlerror());
+        return NULL;
+    }
     char* driver_library = blob ? driver_override : DEFAULT_VULKAN_DRIVER;
     void* driver_handle = linker_ns_dlopen(blob, driver_library, RTLD_LOCAL | RTLD_NOW);
     if(driver_handle == NULL) {
@@ -46,7 +55,10 @@ bool load_vulkan_driver() {
     } else printf("MojoExec: Loaded Vulkan library : %p\n", driver_handle);
 
     void* dl_android = linker_ns_dlopen(false, "libdl_android.so", RTLD_LOCAL | RTLD_LAZY);
-    if(dl_android == NULL) goto fail_t;
+    if(dl_android == NULL) {
+        printf("MojoExec: failed to dlopen dl_android! %s\n", dlerror());
+        goto fail_t;
+    }
 
     void* android_get_exported_namespace = dlsym(dl_android, "android_get_exported_namespace");
     void (*linkerhook_pass_handles)(void*, void*, void*) = dlsym(linkerhook, "app__pojav_linkerhook_pass_handles");
@@ -59,6 +71,8 @@ bool load_vulkan_driver() {
         printf("MojoExec: Loaded mjlvlk, ptr=%p\n", libvulkan);
         driver_loaded = true;
         return true;
+    } else {
+        printf("MojoExec: failed to reference mjlvlk, %s\n", dlerror());
     }
     fail_d: dlclose(dl_android);
     fail_t: dlclose(driver_handle);
