@@ -6,6 +6,7 @@ add_library(mojoexec SHARED
         vulkan_loader.c
         mojoexec.c
         utils.c
+        affinity.c
         driver_helper/nsbypass.c
         driver_helper/fake_dlfcn.c
         driver_helper/func_locator.c)

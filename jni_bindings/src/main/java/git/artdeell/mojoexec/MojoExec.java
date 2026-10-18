@@ -7,4 +7,5 @@ public class MojoExec {
     public static native void overrideVulkanDriverPath(String vulkanLibrary);
     public static native void preloadVulkan();
     public static native void setNativeLibraryDir(String dir);
+    public static native void setUseBigCoreAffinity(boolean enable);
 }
