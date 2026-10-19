@@ -12,13 +12,6 @@
 #include "utils.h"
 #include "paths.h"
 
-/* Library search path */
-#ifdef PLATFORM_64
-#define SEARCH_PATH "/system/lib64"
-#else
-#define SEARCH_PATH "/system/lib"
-#endif
-
 mojoexec_renderspec_t mojoexec_renderspec;
 
 const char* mojoexec_native_dir = NULL;

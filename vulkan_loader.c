@@ -25,8 +25,6 @@ static bool custom_driver_enabled = false;
 static char* driver_override = NULL;
 static char* driver_path = NULL;
 
-#define ENABLE_VULKAN_OVERRIDE
-
 #ifdef ENABLE_VULKAN_OVERRIDE
 
 android_namespace_t *blob_namespace = NULL;
