@@ -9,10 +9,10 @@
 
 /* Library search path */
 #ifdef PLATFORM_64
-#define SEARCH_PATH "/system/lib64"
+#define SEARCH_PATH "/system/lib64:/system_ext/lib64"
 #define BLOB_SEARCH_PATH "/system/lib64:/vendor/lib64:/system_ext/lib64"
 #else
-#define SEARCH_PATH "/system/lib"
+#define SEARCH_PATH "/system/lib:/system_ext/lib"
 #define BLOB_SEARCH_PATH "/system/lib:/vendor/lib:/system_ext/lib"
 #endif
 
