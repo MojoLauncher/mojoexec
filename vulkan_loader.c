@@ -104,7 +104,7 @@ void* mojoexec_acq_vulkan_handle() {
     if(android_get_device_api_level() >= 28) { // the loader does not support below that
         if(custom_driver_enabled && load_vulkan_driver())
             // Reference the vulkan driver separately to avoid weirdness from libraries calling dlclose
-            return linker_ns_dlopen(false, "libmjlvlk.so", flags);
+            return linker_ns_dlopen(mojoexec_get_namespace(), "libmjlvlk.so", flags);
     }
 #endif
     void* vulkan_ptr = dlopen("libvulkan.so", flags);
