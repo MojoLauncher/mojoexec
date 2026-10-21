@@ -24,6 +24,16 @@
 #define TAG __FILE_NAME__
 #include <log.h>
 
+/* Library search path */
+#ifdef PLATFORM_64
+#define SEARCH_PATH "/system/lib64" // used inside dlopen unique
+#define LINKER_SEARCH_PATH "/system/lib64:/vendor/lib64:/system_ext/lib64" // used in namespace linker
+#else
+#define SEARCH_PATH "/system/lib" // used inside dlopen unique
+#define LINKER_SEARCH_PATH "/system/lib:/vendor/lib:/system_ext/lib" // used in namespace linker
+#endif
+
+
 struct android_namespace_t *linker_ns_load(const char* lib_search_path, const char* name) {
     android_ldfuncs_t ldfuncs;
     if(!locate_namespace_funcs(&ldfuncs)) {
@@ -33,8 +43,7 @@ struct android_namespace_t *linker_ns_load(const char* lib_search_path, const ch
     printf("MojoExec: creating new namespace %s : %s\n", name, lib_search_path);
 
     struct android_namespace_t *ns = ldfuncs.create_namespace(name,
-                                                lib_search_path,
-                                            lib_search_path,
+                                                lib_search_path,LINKER_SEARCH_PATH,
                                                       3 /* TYPE_SHAFED | TYPE_ISOLATED */,
                                                       "/system/:/system_ext/:/data/:/vendor/:/apex/", NULL);
     // THIS IS VERY IMPORTANT and how I trolled FoldCraft:

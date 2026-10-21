@@ -63,9 +63,11 @@ void* mojoexec_acq_egl_handle() {
 
 android_namespace_t *mojoexec_get_namespace() {
     if(mojoexec_namespace) return mojoexec_namespace;
-    char full_path[strlen(MAIN_SEARCH_PATH) + strlen(mojoexec_native_dir) + 2 + 1];
-    sprintf(full_path, "%s:%s", mojoexec_native_dir, MAIN_SEARCH_PATH);
-    mojoexec_namespace = linker_ns_load(full_path, "mojoexec-driver");
+    if(!mojoexec_native_dir) {
+        printf("MojoExec: native library path not set! cannot create namespace\n");
+        return NULL;
+    }
+    mojoexec_namespace = linker_ns_load(mojoexec_native_dir, "mojoexec-driver");
     return mojoexec_namespace;
 }
 

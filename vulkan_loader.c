@@ -27,14 +27,13 @@ static char* driver_path = NULL;
 
 #ifdef ENABLE_VULKAN_OVERRIDE
 
+
 android_namespace_t *blob_namespace = NULL;
 
 static android_namespace_t *get_blob_namespace() {
     if(blob_namespace) return blob_namespace;
     if(!driver_path) return NULL;
-    char full_path[strlen(BLOB_SEARCH_PATH) + strlen(driver_path) + 2 + 1];
-    sprintf(full_path, "%s:%s", driver_path, BLOB_SEARCH_PATH);
-    blob_namespace = linker_ns_load(full_path, "blob-driver");
+    blob_namespace = linker_ns_load(driver_path, "blob-driver");
     return blob_namespace;
 }
 
