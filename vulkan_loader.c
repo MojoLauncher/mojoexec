@@ -16,57 +16,47 @@
 
 #include "utils.h"
 
-#define DEFAULT_VULKAN_DRIVER "libvulkan_freedreno.so"
 
-// This controls if we should even hook vulkan driver loading to e.g. replace it with built-in Turnip
-static bool custom_driver_enabled = false;
-
-// These control if we should load a custom vulkan driver provided by user
-static char* driver_override = NULL;
+static char* driver_lib = NULL;
 static char* driver_path = NULL;
 
 #ifdef ENABLE_VULKAN_OVERRIDE
 
-
-android_namespace_t *blob_namespace = NULL;
-
-static android_namespace_t *get_blob_namespace() {
-    if(blob_namespace) return blob_namespace;
-    if(!driver_path) return NULL;
-    blob_namespace = linker_ns_load(driver_path, "blob-driver");
-    return blob_namespace;
-}
-
-bool load_vulkan_driver() {
+static bool load_vulkan_driver() {
     static bool driver_loaded = false;
+    if(driver_lib == NULL) {
+        printf("MojoExec: attempted to preload custom driver, yet no driver is specified\n");
+        return false;
+    }
     if(driver_loaded) return true;
 
     const char* cache_dir = getenv("TMPDIR");
-    // If we load a custom vulkan driver it might be a vendor blob linked to random libraries in system search paths
-    // By default we don't allow loading libs from such places as the built-in driver can accidentally load them instead of our libs
-    // But if the driver is overridden then it might a blob hence we'll use the blob namespace with extra search paths
-    // Before we do this, decide what driver we'll use
-    bool blob = driver_override && driver_path;
-    android_namespace_t *main_ns = mojoexec_get_namespace();
+
+    // The hooked vulkan loader will always be put into the primary mojoexec namespace
+    struct android_namespace_t *main_ns = get_primary_namespace();
     if(!main_ns) {
         printf("MojoExec: failed to load main namespace!\n");
         return NULL;
     }
-    if(blob && !get_blob_namespace()) {
-        printf("MojoExec: failed to load blob namespace!\n");
-        blob = false;
+
+    // By default, the driver will use the primary namespace which includes launcher libs. However,
+    // to avoid 3rd party driver packages from loading launcher libs (and possibly failing),
+    // we allow the user to specify custom search paths. This will create another namespace,
+    // completely isolated from the launcher.
+    struct android_namespace_t *driver_ns = main_ns;
+    if(driver_path != NULL) {
+        driver_ns = linker_ns_load(driver_path, "mojoexec-driver");
     }
-    // Custom drivers are loaded in the blob namespace
-    android_namespace_t *current_ns = blob ? blob_namespace : main_ns;
+
     void* linkerhook = linker_ns_dlopen(main_ns, "liblinkerhook.so", RTLD_LOCAL | RTLD_NOW);
     if(linkerhook == NULL) {
         printf("MojoExec: failed to load linkerhook! %s\n", dlerror());
         return NULL;
     }
-    char* driver_library = blob ? driver_override : DEFAULT_VULKAN_DRIVER;
-    void* driver_handle = linker_ns_dlopen(current_ns, driver_library, RTLD_LOCAL | RTLD_NOW);
+
+    void* driver_handle = linker_ns_dlopen(driver_ns, driver_lib, RTLD_LOCAL | RTLD_NOW);
     if(driver_handle == NULL) {
-        printf("MojoExec: Failed to load custom Vulkan driver (%s)!\n%s\n",driver_library, dlerror());
+        printf("MojoExec: Failed to load custom Vulkan driver (%s)!\n%s\n", driver_lib, dlerror());
         goto fail_l;
     } else printf("MojoExec: Loaded Vulkan library : %p\n", driver_handle);
 
@@ -90,6 +80,7 @@ bool load_vulkan_driver() {
     } else {
         printf("MojoExec: failed to reference mjlvlk, %s\n", dlerror());
     }
+
     fail_d: dlclose(dl_android);
     fail_t: dlclose(driver_handle);
     fail_l: dlclose(linkerhook);
@@ -101,9 +92,9 @@ void* mojoexec_acq_vulkan_handle() {
     int flags = RTLD_LOCAL | RTLD_NOW;
 #ifdef ENABLE_VULKAN_OVERRIDE
     if(android_get_device_api_level() >= 28) { // the loader does not support below that
-        if(custom_driver_enabled && load_vulkan_driver())
+        if(driver_lib != NULL && load_vulkan_driver())
             // Reference the vulkan driver separately to avoid weirdness from libraries calling dlclose
-            return linker_ns_dlopen(mojoexec_get_namespace(), "libmjlvlk.so", flags);
+            return linker_ns_dlopen(get_primary_namespace(), "libmjlvlk.so", flags);
     }
 #endif
     void* vulkan_ptr = dlopen("libvulkan.so", flags);
@@ -111,16 +102,11 @@ void* mojoexec_acq_vulkan_handle() {
     return vulkan_ptr;
 }
 
-JNIEXPORT void JNICALL
-Java_git_artdeell_mojoexec_MojoExec_overrideVulkanDriver(JNIEnv *env, jclass clazz, jboolean enable) {
-    custom_driver_enabled = enable;
-}
-
 // Does nothing if Turnip is unsupported - Mesa will load system driver automatically
 JNIEXPORT void JNICALL
 Java_git_artdeell_mojoexec_MojoExec_preloadVulkan(JNIEnv *env, jclass clazz) {
 #ifdef ENABLE_VULKAN_OVERRIDE
-    if(!custom_driver_enabled) return;
+    if(driver_lib == NULL) return;
     if(!load_vulkan_driver()) {
         printf("MojoExec: Failed to preload Vulkan driver!\n");
     }
@@ -128,13 +114,9 @@ Java_git_artdeell_mojoexec_MojoExec_preloadVulkan(JNIEnv *env, jclass clazz) {
 }
 
 JNIEXPORT void JNICALL
-Java_git_artdeell_mojoexec_MojoExec_overrideVulkanDriverPath(JNIEnv *env, jclass clazz, jstring driver_library){
-    save_jvm_string(env, &driver_override, driver_library);
-}
-
-JNIEXPORT void JNICALL
-Java_git_artdeell_mojoexec_MojoExec_overrideVulkanLibraryPath__Ljava_lang_String_2(JNIEnv *env,
-                                                                                   jclass clazz,
-                                                                                   jstring vulkan_library_path) {
-    save_jvm_string(env, &driver_path, vulkan_library_path);
+Java_git_artdeell_mojoexec_MojoExec_configureCustomVulkanDriver(JNIEnv *env, jclass clazz,
+                                                                jstring library_name,
+                                                                jstring library_search_path) {
+    save_jvm_string(env, &driver_lib, library_name);
+    save_jvm_string(env, &driver_path, library_search_path);
 }
