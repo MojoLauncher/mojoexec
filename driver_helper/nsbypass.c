@@ -119,7 +119,7 @@ void* linker_ns_dlopen_unique(struct android_namespace_t * namespace, const char
     snprintf(pathbuf, PATH_MAX, "%s/%s", SEARCH_PATH, name);
     real_fd = open(pathbuf, O_RDONLY);
     if(real_fd == -1) {
-        printf("MojoExec: failed to open real_fd\n");
+        printf("MojoExec: failed to open original library: %s\n", pathbuf);
         return NULL;
     }
 
@@ -136,19 +136,19 @@ void* linker_ns_dlopen_unique(struct android_namespace_t * namespace, const char
         patch_fd = open(pathbuf, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     }
     if(patch_fd == -1) {
-        printf("MojoExec: failed to open - invalid fd (fail_real)\n");
+        printf("MojoExec: failed to open patched library: %s\n", pathbuf);
         goto fail_real;
     }
 
     if(ftruncate64(patch_fd, totalsize) == -1) {
-        printf("MojoExec: failed to ftruncate (fail_both)\n");
+        printf("MojoExec: failed to set patched library size!\n");
         goto fail_both;
     }
 
     bool patch_result = patch_elf_soname(patch_fd, real_fd, fsize, patch_name);
     close(real_fd);
     if(!patch_result) {
-        printf("MojoExec: patch_result failed\n");
+        printf("MojoExec: failed to apply soname patch %s!\n", patch_name);
         close(patch_fd);
         return NULL;
     }
