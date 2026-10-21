@@ -9,23 +9,17 @@
 #include <driver_helper/nsbypass.h>
 #include <dlfcn.h>
 
+#include "utils.h"
+#include "paths.h"
+
 mojoexec_renderspec_t mojoexec_renderspec;
 
 const char* mojoexec_native_dir = NULL;
 char* native_egl_path = NULL;
 bool egl_use_bypass = false;
 
-static void save_jvm_string(JNIEnv* env, char** target, jstring str) {
-    if(*target != NULL) free(*target);
-    if(str == NULL) {
-        *target = NULL;
-        return;
-    }
+static android_namespace_t *mojoexec_namespace = NULL;
 
-    const char* path = (*env)->GetStringUTFChars(env, str, NULL);
-    *target = strdup(path);
-    (*env)->ReleaseStringUTFChars(env, str, path);
-}
 
 JNIEXPORT jboolean JNICALL
 Java_git_artdeell_mojoexec_MojoExec_prepareEgl(JNIEnv *env, jclass clazz, jstring egl_path,
@@ -33,14 +27,14 @@ Java_git_artdeell_mojoexec_MojoExec_prepareEgl(JNIEnv *env, jclass clazz, jstrin
                                                jint gles_version) {
     save_jvm_string(env, &native_egl_path, egl_path);
     if(native_egl_path == NULL) return false;
-    if(use_bypass && !linker_ns_load(mojoexec_native_dir)) return false;
+    if(use_bypass && !mojoexec_get_namespace()) return false;
     egl_use_bypass = use_bypass;
     void* preload_handle = mojoexec_acq_egl_handle();
     if(!preload_handle) {
         printf("MojoExec: Failed to load EGL: %s\n", dlerror());
         return false;
     }
-    printf("MojoExec: Loaded EGL %s (in namespace: %i)\n", native_egl_path, egl_use_bypass);
+    printf("MojoExec: Loaded EGL %s (mojoexec namespace: %b)\n", native_egl_path, egl_use_bypass);
     mojoexec_renderspec.force_gles_context = use_gles;
     mojoexec_renderspec.override_major_version = gles_version;
     return true;
@@ -63,7 +57,17 @@ Java_git_artdeell_mojoexec_MojoExec_setDisplayParams(JNIEnv *env, jclass clazz, 
 
 void* mojoexec_acq_egl_handle() {
     int flags = RTLD_LOCAL | RTLD_NOW;
-    if(egl_use_bypass) return linker_ns_dlopen(native_egl_path, flags);
+    if(egl_use_bypass) return linker_ns_dlopen(mojoexec_namespace, native_egl_path, flags);
     else return dlopen(native_egl_path, flags);
+}
+
+android_namespace_t *mojoexec_get_namespace() {
+    if(mojoexec_namespace) return mojoexec_namespace;
+    if(!mojoexec_native_dir) {
+        printf("MojoExec: native library path not set! cannot create namespace\n");
+        return NULL;
+    }
+    mojoexec_namespace = linker_ns_load(mojoexec_native_dir, "mojoexec-driver");
+    return mojoexec_namespace;
 }
 
