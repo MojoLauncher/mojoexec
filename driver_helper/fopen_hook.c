@@ -5,30 +5,27 @@
 #include <dlfcn.h>
 #include <string.h>
 #include <stdio.h>
+#include <malloc.h>
 
 
 static FILE* (*real_fopen)(const char*, const char*);
-static FILE* config_handle;
+static const char* config_path;
+static FILE* handle;
 
 __attribute((visibility("default"), used)) FILE* fopen(const char* filename, const char* mode) {
-    if(config_handle && strstr(filename, "qgl_config.txt")) {
-        printf("MojoExec: redirecting QGL config load to %p handle\n", config_handle);
-        return config_handle;
-    }
-    // Fallback to generic fopen
     if(!real_fopen) {
         real_fopen = dlsym(RTLD_NEXT, "fopen");
     }
-    if(!real_fopen) {
-        printf("MojoExec: failed to fetch fopen symbol!\n");
-        return NULL;
+    if(config_path && strstr(filename, "qgl_config.txt")) {
+        printf("MojoExec: redirecting QGL config load to %s path\n", config_path);
+        return real_fopen(config_path, mode);
     }
     return real_fopen(filename, mode);
 }
 
-__attribute((visibility("default"), used)) void fhook_pass_handles(FILE *config) {
-    if(!config) return;
-    if(config_handle) fclose(config_handle);
-    config_handle = config;
-    printf("MojoExec: accepted QGL config handle : %p\n", config);
+__attribute((visibility("default"), used)) void fhook_pass_path(const char* path) {
+    if(!path) return;
+    if(config_path) free((void*)path);
+    config_path = path;
+    printf("MojoExec: accepted QGL config path : %s\n", path);
 }

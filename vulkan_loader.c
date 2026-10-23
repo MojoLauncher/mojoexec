@@ -23,16 +23,16 @@ static char* config_override = NULL;
 #ifdef ENABLE_VULKAN_OVERRIDE
 
 // This allows us to redirect Qualcomm proprietary config file
-void setup_fopen_hook(struct android_namespace_t *driver_ns, FILE* handle) {
-    if(!handle) {
+void setup_fopen_hook(struct android_namespace_t *driver_ns, const char* path) {
+    if(!path) {
         printf("MojoExec: provide a correct path to override qgl config\n");
         return;
     }
     void* fopen_hook = linker_ns_dlopen(driver_ns, "libfopenhook.so", RTLD_GLOBAL | RTLD_NOW);
     if(!fopen_hook) goto fail;
-    void (*fhook_pass_handles)(FILE*) = dlsym(fopen_hook, "fhook_pass_handles");
-    if(!fhook_pass_handles) goto fail;
-    fhook_pass_handles(handle);
+    void (*fhook_pass_path)(const char*) = dlsym(fopen_hook, "fhook_pass_path");
+    if(!fhook_pass_path) goto fail;
+    fhook_pass_path(path);
     return;
 
     fail:
@@ -64,7 +64,7 @@ static bool load_vulkan_driver() {
     struct android_namespace_t *driver_ns = main_ns;
     if(driver_path != NULL) {
         driver_ns = linker_ns_load(driver_path, "mojoexec-driver");
-        if(config_override) setup_fopen_hook(driver_ns, fopen(config_override, "r"));
+        if(config_override) setup_fopen_hook(driver_ns, config_override);
     }
     void* linkerhook = linker_ns_dlopen(main_ns, "liblinkerhook.so", RTLD_LOCAL | RTLD_NOW);
     if(linkerhook == NULL) {
