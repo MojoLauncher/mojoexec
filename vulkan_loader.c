@@ -30,9 +30,9 @@ void setup_fopen_hook(struct android_namespace_t *driver_ns, const char* path) {
     }
     void* fopen_hook = linker_ns_dlopen(driver_ns, "libfopenhook.so", RTLD_GLOBAL | RTLD_NOW);
     if(!fopen_hook) goto fail;
-    void (*fhook_pass_path)(const char*) = dlsym(fopen_hook, "fhook_pass_path");
-    if(!fhook_pass_path) goto fail;
-    fhook_pass_path(path);
+    void (*fhook_pass_handles)(const char*, void*) = dlsym(fopen_hook, "fhook_pass_handles");
+    if(!fhook_pass_handles) goto fail;
+    fhook_pass_handles(path, &fopen);
     return;
 
     fail:
