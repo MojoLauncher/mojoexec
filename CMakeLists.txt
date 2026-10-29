@@ -20,11 +20,18 @@ if(CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     target_sources(mojoexec PRIVATE driver_helper/arm64_func_locator.c)
     target_compile_definitions(mojoexec PRIVATE USE_ARM64_LOCATOR)
     target_compile_definitions(mojoexec PRIVATE ENABLE_VULKAN_OVERRIDE)
+    target_compile_definitions(mojoexec PRIVATE ENABLE_QGL_REDIRECT)
 
     add_library(linkerhook SHARED
             driver_helper/hook.c
     )
     target_link_options(linkerhook PRIVATE "-Wl,-z,global")
+    add_library(fopenhook SHARED
+            driver_helper/fopen_hook.c)
+    target_include_directories(fopenhook PUBLIC include)
+    target_include_directories(fopenhook PRIVATE ".")
+    target_link_options(fopenhook PRIVATE "-Wl,-z,global")
+    target_link_libraries(fopenhook PRIVATE mojoexec)
 endif()
 
 target_link_options(mojoexec PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/version.script")
@@ -32,10 +39,3 @@ target_link_options(mojoexec PRIVATE "-Wl,--version-script=${CMAKE_CURRENT_SOURC
 set_target_properties(mojoexec PROPERTIES
         LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/version.script"
 )
-
-add_library(fopenhook SHARED
-        driver_helper/fopen_hook.c)
-target_include_directories(fopenhook PUBLIC include)
-target_include_directories(fopenhook PRIVATE ".")
-target_link_options(fopenhook PRIVATE "-Wl,-z,global")
-target_link_libraries(fopenhook PRIVATE mojoexec)

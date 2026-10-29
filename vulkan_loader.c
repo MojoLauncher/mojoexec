@@ -20,7 +20,7 @@ static char* driver_lib = NULL;
 static char* driver_path = NULL;
 static char* config_override = NULL;
 
-#ifdef ENABLE_VULKAN_OVERRIDE
+#ifdef ENABLE_QGL_REDIRECT
 
 // This allows us to redirect Qualcomm proprietary config file
 void setup_fopen_hook(struct android_namespace_t *driver_ns, const char* path) {
@@ -38,6 +38,10 @@ void setup_fopen_hook(struct android_namespace_t *driver_ns, const char* path) {
     fail:
     printf("MojoExec: failed to init fopen hook!\n");
 }
+
+#endif
+
+#ifdef ENABLE_VULKAN_OVERRIDE
 
 
 static bool load_vulkan_driver() {
@@ -64,7 +68,9 @@ static bool load_vulkan_driver() {
     struct android_namespace_t *driver_ns = main_ns;
     if(driver_path != NULL) {
         driver_ns = linker_ns_load(driver_path, "mojoexec-driver");
+#ifdef ENABLE_QGL_REDIRECT
         if(config_override) setup_fopen_hook(driver_ns, config_override);
+#endif
     }
     void* linkerhook = linker_ns_dlopen(main_ns, "liblinkerhook.so", RTLD_LOCAL | RTLD_NOW);
     if(linkerhook == NULL) {
