@@ -62,7 +62,7 @@ static void create_affinity_set() {
 }
 
 void mojoexec_make_bigcore_affine() {
-    if(big_core_affine) return;
+    if(big_core_affine || !should_use_affinity) return;
     if(!has_affinity_set) create_affinity_set();
     int result = sched_setaffinity(0, CPU_SETSIZE, &bigcore_affinity_set);
     if(result != 0) {
